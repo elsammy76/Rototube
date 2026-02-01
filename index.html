@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>🎬 RotoTube Editor</title>
+
+<style>
+body{
+  margin:0;
+  background:#0f0f0f;
+  color:white;
+  font-family:Arial;
+}
+
+nav{
+  background:#111;
+  padding:10px;
+  display:flex;
+  gap:10px;
+}
+
+nav button{
+  background:#222;
+  color:white;
+  border:1px solid #444;
+  padding:8px 12px;
+  cursor:pointer;
+}
+
+.hidden{display:none;}
+
+#stage{
+  width:520px;
+  height:360px;
+  border:2px dashed #444;
+  margin:10px auto;
+  position:relative;
+  overflow:hidden;
+}
+
+#sprite,#watchSprite{
+  position:absolute;
+  left:120px;
+  top:120px;
+  cursor:pointer;
+}
+
+.control{
+  position:absolute;
+  padding:6px 10px;
+  font-size:12px;
+  color:white;
+  cursor:pointer;
+  z-index:10;
+}
+
+#move{background:#1e90ff;}
+#rotate{background:#ff4444;}
+#size{background:#44cc44;}
+
+#kfList div{
+  padding:6px;
+  margin:4px;
+  border:1px solid #333;
+  cursor:pointer;
+}
+
+.selected{
+  border:2px solid #1e90ff !important;
+}
+
+.card{
+  border:1px solid #333;
+  padding:10px;
+  margin:10px;
+  display:inline-block;
+  cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+
+<nav>
+  <button onclick="show('home')">🏠 Home</button>
+  <button onclick="show('editor')">🎨 Editor</button>
+</nav>
+
+<!-- HOME -->
+<div id="home">
+  <h2>🔥 Animaciones publicadas</h2>
+  <div id="gallery"></div>
+</div>
+
+<!-- EDITOR -->
+<div id="editor" class="hidden">
+  🎞 FPS:
+  <input type="number" id="fps" value="24" style="width:60px"><br><br>
+
+  <input type="file" id="upload"><br>
+
+  <div id="stage">
+    <img id="sprite">
+    <div id="move" class="control hidden">Move</div>
+    <div id="rotate" class="control hidden">Rotate</div>
+    <div id="size" class="control hidden">Size</div>
+  </div>
+
+  <button id="addKF">➕ Crear KF</button>
+  <button id="play">▶ Play</button>
+  <button id="publish">📤 Publicar</button>
+
+  <h3>Keyframes</h3>
+  <div id="kfList"></div>
+</div>
+
+<!-- WATCH -->
+<div id="watch" class="hidden">
+  <h2 id="watchTitle"></h2>
+  <div id="stage">
+    <img id="watchSprite">
+  </div>
+</div>
+
+<script>
+/* -------- Navegación -------- */
+const sections=["home","editor","watch"];
+function show(id){
+  sections.forEach(s=>document.getElementById(s).classList.add("hidden"));
+  document.getElementById(id).classList.remove("hidden");
+  if(id==="home") loadGallery();
+}
+
+/* -------- Editor -------- */
+const sprite=document.getElementById("sprite");
+const upload=document.getElementById("upload");
+const addKF=document.getElementById("addKF");
+const playBtn=document.getElementById("play");
+const publishBtn=document.getElementById("publish");
+const kfList=document.getElementById("kfList");
+const fpsInput=document.getElementById("fps");
+
+const moveBtn=document.getElementById("move");
+const rotateBtn=document.getElementById("rotate");
+const sizeBtn=document.getElementById("size");
+
+let keyframes=[];
+let selectedKF=null;
+let dragging=false;
+let mode=null;
+let startX,startY;
+let playing=false;
+const duration=2;
+
+/* Imagen */
+upload.onchange=e=>{
+  const r=new FileReader();
+  r.onload=()=>sprite.src=r.result;
+  r.readAsDataURL(e.target.files[0]);
+};
+
+/* Mostrar controles */
+sprite.onclick=()=>{
+  if(selectedKF===null) return;
+  showControls();
+};
+
+function showControls(){
+  const kf=keyframes[selectedKF];
+  [moveBtn,rotateBtn,sizeBtn].forEach(b=>b.classList.remove("hidden"));
+
+  moveBtn.style.left=kf.x+"px";
+  moveBtn.style.top=(kf.y-30)+"px";
+  rotateBtn.style.left=(kf.x+60)+"px";
+  rotateBtn.style.top=(kf.y-30)+"px";
+  sizeBtn.style.left=(kf.x+130)+"px";
+  sizeBtn.style.top=(kf.y-30)+"px";
+}
+
+/* Drag */
+function startDrag(e,m){
+  dragging=true;
+  mode=m;
+  startX=e.clientX;
+  startY=e.clientY;
+}
+
+[moveBtn,rotateBtn,sizeBtn].forEach(b=>{
+  b.onmousedown=e=>startDrag(e,b.id);
+});
+
+document.onmousemove=e=>{
+  if(!dragging) return;
+  const kf=keyframes[selectedKF];
+  const dx=e.clientX-startX;
+  const dy=e.clientY-startY;
+
+  if(mode==="move"){kf.x+=dx; kf.y+=dy;}
+  if(mode==="rotate"){kf.rotate+=dx;}
+  if(mode==="size"){kf.scale+=dx*0.01;}
+
+  startX=e.clientX;
+  startY=e.clientY;
+  updateSprite(kf);
+  showControls();
+};
+
+document.onmouseup=()=>dragging=false;
+
+function updateSprite(kf){
+  sprite.style.transform=
+    `translate(${kf.x}px,${kf.y}px)
+     rotate(${kf.rotate}deg)
+     scale(${kf.scale})`;
+}
+
+/* Crear KF */
+addKF.onclick=()=>{
+  const percent=keyframes.length===0?0:
+                keyframes.length===1?50:100;
+  const kf={percent,x:120,y:120,rotate:0,scale:1};
+  keyframes.push(kf);
+
+  const d=document.createElement("div");
+  d.textContent=`KF${keyframes.length} (${percent}%)`;
+  d.onclick=()=>{
+    selectedKF=keyframes.indexOf(kf);
+    [...kfList.children].forEach(x=>x.classList.remove("selected"));
+    d.classList.add("selected");
+    updateSprite(kf);
+    showControls();
+  };
+  kfList.appendChild(d);
+};
+
+/* Play / Pause */
+playBtn.onclick=()=>{
+  if(!playing){
+    playBtn.textContent="⏸ Pause";
+    playAnim(sprite,keyframes,fpsInput.value);
+  }else{
+    playBtn.textContent="▶ Play";
+    sprite.style.animation="none";
+  }
+  playing=!playing;
+};
+
+function playAnim(img,kfs,fps){
+  let css="@keyframes anim{";
+  kfs.forEach(kf=>{
+    css+=`${kf.percent}%{
+      transform:translate(${kf.x}px,${kf.y}px)
+      rotate(${kf.rotate}deg)
+      scale(${kf.scale});
+    }`;
+  });
+  css+="}";
+  let s=document.getElementById("dyn")||document.createElement("style");
+  s.id="dyn"; s.innerHTML=css; document.head.appendChild(s);
+  img.style.animation=`anim ${duration}s steps(${fps}) infinite`;
+}
+
+/* Publicar */
+publishBtn.onclick=()=>{
+  const title=prompt("Nombre de la animación:");
+  if(!title) return;
+  const list=JSON.parse(localStorage.getItem("rototube")||"[]");
+  list.push({title,img:sprite.src,keyframes});
+  localStorage.setItem("rototube",JSON.stringify(list));
+  alert("🔥 Publicado");
+  show("home");
+};
+
+/* Home */
+function loadGallery(){
+  const g=document.getElementById("gallery");
+  g.innerHTML="";
+  const list=JSON.parse(localStorage.getItem("rototube")||"[]");
+  list.forEach(a=>{
+    const c=document.createElement("div");
+    c.className="card";
+    c.innerHTML=`<b>${a.title}</b><br><img src="${a.img}" width="120">`;
+    c.onclick=()=>openWatch(a);
+    g.appendChild(c);
+  });
+}
+
+/* Watch */
+function openWatch(a){
+  show("watch");
+  document.getElementById("watchTitle").textContent=a.title;
+  const img=document.getElementById("watchSprite");
+  img.src=a.img;
+  playAnim(img,a.keyframes,24);
+}
+
+show("home");
+</script>
+
+</body>
+</html>
